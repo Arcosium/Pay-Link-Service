@@ -1,0 +1,13 @@
+[Unit]
+Description=PayLink Service
+After=network.target
+
+[Service]
+Type=simple
+User=opc
+WorkingDirectory=/home/opc/projects/Pay-Link Service
+ExecStart=/bin/python "/home/opc/projects/Pay-Link Service/PayLink_final.py"
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
