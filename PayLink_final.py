@@ -13,12 +13,12 @@ from dotenv import load_dotenv
 # ============================================
 # 설정
 # ============================================
-load_dotenv("/home/opc/mysite/.env")
+load_dotenv("/home/opc/projects/mysite/.env")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 CSV_PATH = os.environ.get("CSV_PATH", "plans.csv")
 
 genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel('gemini-2.0-flash')
+model = genai.GenerativeModel('gemini-2.5-flash')
 
 app = FastAPI(title="PayLink API", version="2.0")
 
@@ -352,7 +352,9 @@ def generate_plan_response(plans_df: pd.DataFrame) -> str:
         
         if pd.notna(plan['benefits']) and plan['benefits'].strip():
             response_parts.append(f"  혜택: {plan['benefits']}")
-        response_parts.append(f"  [자세히 보기]({plan['link']})")
+        link = plan.get('link', None)
+        if link is not None and pd.notna(link) and str(link).strip():
+            response_parts.append(f"  [자세히 보기]({link})")
             
     if len(plans_df) > 3:
         response_parts.append(f"\n이 외에도 {len(plans_df) - 3}개의 요금제가 더 있습니다.")

@@ -1,13 +1,19 @@
+# systemd 유닛 — sudo cp 로 /etc/systemd/system/paylink.service 설치 후 enable --now.
+# paylink.ai-ve.uk (Cloudflare hyfe-iqc 터널) -> 127.0.0.1:8502 로 프록시됨.
 [Unit]
-Description=PayLink Service
-After=network.target
+Description=Kakaopay PayLink Service (paylink.ai-ve.uk)
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
 User=opc
+Group=opc
 WorkingDirectory=/home/opc/projects/Pay-Link Service
-ExecStart=/bin/python "/home/opc/projects/Pay-Link Service/PayLink_final.py"
+Environment=APP_PORT=8502
+ExecStart=/usr/bin/python3 PayLink_final.py
 Restart=always
+RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
