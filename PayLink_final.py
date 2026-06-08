@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 # ============================================
 # 설정
 # ============================================
-load_dotenv("/home/opc/projects/mysite/.env")
+load_dotenv("/home/opc/projects/.env")  # 통합 .env (전 프로젝트 공용)
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 CSV_PATH = os.environ.get("CSV_PATH", "plans.csv")
 
