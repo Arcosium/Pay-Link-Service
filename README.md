@@ -3,11 +3,11 @@
 > "3만원 이하로 데이터 무제한" 한 마디로 SKT·KT·LG U+ 와 알뜰폰 2,300여 개 요금제 중 적합한 3개를 추천하는 한국어 대화형 어시스턴트.
 
 PayLink 는 자연어로 통신 요금제를 검색할 수 있는 챗봇입니다.
-사용자가 한국어로 조건을 말하면 **Google Gemini 2.0 Flash** 가 의도와 파라미터를 추출하고,
+사용자가 한국어로 조건을 말하면 로컬 LLM이 의도와 파라미터를 추출하고,
 Pandas 가 2,324 개의 요금제 데이터(`plans.csv`)에서 가격·데이터·약정·혜택 조건에 맞는
 요금제 3개를 골라 카드 UI 로 보여줍니다.
 
-- **백엔드**: FastAPI + Gemini 2.0 Flash (의도 추출)
+- **백엔드**: FastAPI + 로컬 OpenAI 호환 LLM (의도 추출)
 - **프론트**: 단일 `index.html` (Tailwind CSS + Vanilla JS, Pretendard 한글 폰트)
 - **데이터**: `plans.csv` — 2,324 row × 11 column (SKT/KT/LG + 알뜰폰)
 - **배포**: systemd + Nginx 리버스 프록시
@@ -32,13 +32,14 @@ Pandas 가 2,324 개의 요금제 데이터(`plans.csv`)에서 가격·데이터
 ### 1. 의존성
 
 ```bash
-pip install fastapi uvicorn pandas google-generativeai python-dotenv
+pip install fastapi uvicorn pandas python-dotenv
 ```
 
 ### 2. 환경변수 (`.env`)
 
 ```bash
-GEMINI_API_KEY=AIza...        # Google AI Studio 에서 발급
+LOCAL_LLM_BASE_URL=           # 로컬 OpenAI 호환 서버 URL (예: http://127.0.0.1:8000/v1)
+LOCAL_LLM_MODEL=Qwen3.6-35B-A3B-Uncensored-Claude-Genesis-Q8_0.gguf
 CSV_PATH=./plans.csv          # 선택, 기본은 스크립트 폴더
 APP_PORT=7861                 # 선택, 미설정시 7861~7898 자동 탐색
 ```

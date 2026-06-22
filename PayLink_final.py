@@ -7,18 +7,24 @@ import pandas as pd
 import json
 import re
 import os
-import google.generativeai as genai
+import urllib.request
 from dotenv import load_dotenv
 
 # ============================================
 # 설정
 # ============================================
 load_dotenv("/home/opc/projects/.env")  # 통합 .env (전 프로젝트 공용)
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 CSV_PATH = os.environ.get("CSV_PATH", "plans.csv")
+LOCAL_LLM_BASE_URL = os.environ.get("LOCAL_LLM_BASE_URL", "").rstrip("/")
+LOCAL_LLM_MODEL = os.environ.get("LOCAL_LLM_MODEL", "Qwen3.6-35B-A3B-Uncensored-Claude-Genesis-Q8_0.gguf")
 
-genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel('gemini-2.5-flash')
+def local_llm_completion(prompt: str) -> str:
+    if not LOCAL_LLM_BASE_URL:
+        raise RuntimeError("LOCAL_LLM_BASE_URL is not configured")
+    payload = {"model": LOCAL_LLM_MODEL, "messages": [{"role": "user", "content": prompt}], "response_format": {"type": "json_object"}}
+    req = urllib.request.Request(LOCAL_LLM_BASE_URL + "/chat/completions", data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"}, method="POST")
+    with urllib.request.urlopen(req, timeout=120) as response:
+        return json.loads(response.read())["choices"][0]["message"]["content"]
 
 app = FastAPI(title="PayLink API", version="2.0")
 
@@ -179,8 +185,7 @@ def extract_intent(message: str) -> dict:
     prompt = INTENT_PROMPT_TEMPLATE.format(message=message)
     
     try:
-        response = model.generate_content(prompt)
-        ai_raw = response.text.strip()
+        ai_raw = local_llm_completion(prompt).strip()
         print(f"[INTENT] AI 응답: {ai_raw[:200]}")
         
         # JSON 추출
@@ -428,4 +433,3 @@ if __name__ == "__main__":
     port = _resolve_port()
     print(f"[PayLink] Starting on port {port}")
     uvicorn.run(app, host="0.0.0.0", port=port)
-
