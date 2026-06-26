@@ -8,22 +8,43 @@ import json
 import re
 import os
 import urllib.request
+import traceback
 from dotenv import load_dotenv
 
 # ============================================
 # 설정
 # ============================================
-load_dotenv("/home/opc/projects/.env")  # 통합 .env (전 프로젝트 공용)
+# 통합 .env (전 프로젝트 공용). 호스트별 마운트 경로가 다를 수 있어 둘 다 시도한다.
+# (/home/opc/... 와 /home/arcosium/... 는 동일 inode bind-mount 인 경우가 많다.)
+for _env_path in ("/home/arcosium/projects/.env", "/home/opc/projects/.env"):
+    if os.path.isfile(_env_path):
+        load_dotenv(_env_path)
 CSV_PATH = os.environ.get("CSV_PATH", "plans.csv")
-LOCAL_LLM_BASE_URL = os.environ.get("LOCAL_LLM_BASE_URL", "").rstrip("/")
-LOCAL_LLM_MODEL = os.environ.get("LOCAL_LLM_MODEL", "Qwen3.6-35B-A3B-Uncensored-Claude-Genesis-Q8_0.gguf")
+# 로컬 LLM = Ollama OpenAI 호환 서버 (GB10). .env 가 없을 때를 대비해 폴백 기본값을 둔다.
+LOCAL_LLM_BASE_URL = (os.environ.get("LOCAL_LLM_BASE_URL") or "http://127.0.0.1:11434/v1").rstrip("/")
+LOCAL_LLM_MODEL = os.environ.get("LOCAL_LLM_MODEL") or "qwen3.6-35b-a3b-uncensored"
+LOCAL_LLM_API_KEY = os.environ.get("LOCAL_LLM_API_KEY") or "ollama"  # Ollama 는 키 불요, 일부 클라이언트 호환용
+# ⚠ 추론(reasoning) 모델 함정: 응답이 reasoning + content 로 갈리고 추론이 max_tokens 를
+# 먼저 소진한다. 작으면(400~1024) content 가 빈 문자열(finish_reason=length)이 된다.
+# 단순 쿼리도 추론 3000+토큰을 쓰므로 넉넉히 잡는다 (context 262144 라 안전).
+LOCAL_LLM_MAX_TOKENS = int(os.environ.get("LOCAL_LLM_MAX_TOKENS") or "24000")
 
 def local_llm_completion(prompt: str) -> str:
     if not LOCAL_LLM_BASE_URL:
         raise RuntimeError("LOCAL_LLM_BASE_URL is not configured")
-    payload = {"model": LOCAL_LLM_MODEL, "messages": [{"role": "user", "content": prompt}], "response_format": {"type": "json_object"}}
-    req = urllib.request.Request(LOCAL_LLM_BASE_URL + "/chat/completions", data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"}, method="POST")
-    with urllib.request.urlopen(req, timeout=120) as response:
+    payload = {
+        "model": LOCAL_LLM_MODEL,
+        "messages": [{"role": "user", "content": prompt}],
+        "response_format": {"type": "json_object"},
+        "max_tokens": LOCAL_LLM_MAX_TOKENS,
+    }
+    req = urllib.request.Request(
+        LOCAL_LLM_BASE_URL + "/chat/completions",
+        data=json.dumps(payload).encode(),
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {LOCAL_LLM_API_KEY}"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=300) as response:
         return json.loads(response.read())["choices"][0]["message"]["content"]
 
 app = FastAPI(title="PayLink API", version="2.0")
@@ -200,7 +221,7 @@ def extract_intent(message: str) -> dict:
         return keyword_fallback(message)
         
     except Exception as e:
-        print(f"[INTENT] AI 오류: {e}, 키워드 폴백 사용")
+        print(f"[INTENT] AI 오류: {e}, 키워드 폴백 사용\n{traceback.format_exc()}", flush=True)
         return keyword_fallback(message)
 
 
@@ -369,7 +390,10 @@ def generate_plan_response(plans_df: pd.DataFrame) -> str:
 # ============================================
 # FastAPI 라우트
 # ============================================
+# 프론트엔드(index.html)는 `/api/chat` 으로 POST 한다. 백엔드 정식 경로는 `/chat`(README 문서화).
+# 둘 다 같은 핸들러로 받아 경로 불일치로 인한 404(프론트 generic error)를 방지한다.
 @app.post("/chat", response_model=ChatResponse)
+@app.post("/api/chat", response_model=ChatResponse, include_in_schema=False)
 async def chat_endpoint(request: ChatRequest):
     try:
         intent_result = extract_intent(request.message)
@@ -394,7 +418,8 @@ async def chat_endpoint(request: ChatRequest):
         return ChatResponse(success=True, messages=messages)
         
     except Exception as e:
-        print(f"API 오류: {e}")
+        # 사용자에겐 프론트의 generic 메시지가 보이되, 서버 로그엔 전체 트레이스백을 남겨 원인 추적이 가능하게 한다.
+        print(f"API 오류: {e}\n{traceback.format_exc()}", flush=True)
         return ChatResponse(success=False, messages=[], error=str(e))
 
 @app.get("/health")
